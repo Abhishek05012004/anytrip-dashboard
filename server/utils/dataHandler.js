@@ -1,17 +1,15 @@
+// Enhanced data handler with better persistence strategy
 const fs = require("fs")
 const path = require("path")
 
-// Start with EMPTY initial data
-const initialData = {
-  excelSheets: [],
-  websiteLinks: [],
-  tasks: [],
-}
-
-// Check if we're in development or production
+// Check environment
 const isDevelopment = process.env.NODE_ENV !== "production"
+const isVercel = process.env.VERCEL === "1"
 
-// Data file paths
+console.log(`🌍 Environment: ${isDevelopment ? "development" : "production"}`)
+console.log(`☁️ Vercel: ${isVercel ? "yes" : "no"}`)
+
+// Data file paths (for development only)
 const DATA_DIR = path.join(__dirname, "..", "data")
 const FILE_MAP = {
   excelSheets: path.join(DATA_DIR, "excelSheets.json"),
@@ -19,161 +17,142 @@ const FILE_MAP = {
   tasks: path.join(DATA_DIR, "tasks.json"),
 }
 
-// Ensure data directory exists
+// In-memory storage for production (since Vercel filesystem is read-only)
+let memoryStore = {
+  excelSheets: [],
+  websiteLinks: [],
+  tasks: [],
+}
+
+// Initialize memory store with some sample data to test persistence
+const initializeMemoryStore = () => {
+  console.log("🔄 Initializing memory store...")
+  memoryStore = {
+    excelSheets: [],
+    websiteLinks: [],
+    tasks: [],
+  }
+  console.log("✅ Memory store initialized")
+}
+
+// Development file operations
 const ensureDataDirectory = () => {
-  if (!fs.existsSync(DATA_DIR)) {
+  if (isDevelopment && !fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true })
     console.log("📁 Created data directory:", DATA_DIR)
   }
 }
 
-// Initialize data files with empty arrays
 const initializeDataFiles = () => {
-  ensureDataDirectory()
+  if (!isDevelopment) return
 
-  Object.keys(initialData).forEach((key) => {
+  ensureDataDirectory()
+  Object.keys(memoryStore).forEach((key) => {
     const filePath = FILE_MAP[key]
     if (!fs.existsSync(filePath)) {
       fs.writeFileSync(filePath, JSON.stringify([], null, 2))
-      console.log(`📄 Initialized ${key}.json with empty array`)
+      console.log(`📄 Initialized ${key}.json`)
     }
   })
 }
 
-// Clear all data files
-const clearAllDataFiles = () => {
-  try {
-    ensureDataDirectory()
-
-    Object.keys(initialData).forEach((key) => {
-      const filePath = FILE_MAP[key]
-      fs.writeFileSync(filePath, JSON.stringify([], null, 2))
-      console.log(`🧹 Cleared ${key}.json`)
-    })
-
-    // Also clear global storage for production
-    if (global.erpData) {
-      global.erpData = {
-        excelSheets: [],
-        websiteLinks: [],
-        tasks: [],
-      }
-      console.log("🧹 Cleared global storage")
-    }
-
-    return true
-  } catch (error) {
-    console.error("❌ Error clearing data files:", error)
-    return false
-  }
-}
-
-// Production storage using global variables
-const setGlobalData = (key, data) => {
-  try {
-    if (!global.erpData) {
-      global.erpData = {}
-    }
-    global.erpData[key] = JSON.parse(JSON.stringify(data))
-    console.log(`💾 Stored ${data.length} items for ${key} in global storage`)
-    return true
-  } catch (error) {
-    console.error(`❌ Error storing global data for ${key}:`, error)
-    return false
-  }
-}
-
-const getGlobalData = (key) => {
-  try {
-    if (!global.erpData) {
-      global.erpData = {}
-    }
-
-    if (!global.erpData[key]) {
-      global.erpData[key] = []
-      console.log(`🔄 Initialized empty array for ${key} in global storage`)
-    }
-
-    const data = global.erpData[key] || []
-    console.log(`📖 Retrieved ${data.length} items for ${key} from global storage`)
-    return JSON.parse(JSON.stringify(data))
-  } catch (error) {
-    console.error(`❌ Error retrieving global data for ${key}:`, error)
-    return []
-  }
-}
-
-// Read data from appropriate source
+// Read data function
 const readData = async (key) => {
   try {
     if (isDevelopment) {
-      // Development: Always read from JSON files
+      // Development: Read from JSON files
       const filePath = FILE_MAP[key]
       if (!filePath) {
         throw new Error(`Unknown data key: ${key}`)
       }
 
-      // Ensure file exists
       if (!fs.existsSync(filePath)) {
-        console.log(`📄 File ${filePath} doesn't exist, creating empty file...`)
+        console.log(`📄 File ${filePath} doesn't exist, creating...`)
         ensureDataDirectory()
         fs.writeFileSync(filePath, JSON.stringify([], null, 2))
+        return []
       }
 
       const fileContent = fs.readFileSync(filePath, "utf8")
-      const parsedData = JSON.parse(fileContent)
-      console.log(`📖 Read ${parsedData.length} items from ${key}.json`)
-      return parsedData
+      const data = JSON.parse(fileContent)
+      console.log(`📖 Read ${data.length} items from ${key}.json`)
+      return data
     } else {
-      // Production: Use global storage but also try to sync with files if possible
-      return getGlobalData(key)
+      // Production: Use memory store
+      const data = memoryStore[key] || []
+      console.log(`📖 Read ${data.length} items from memory store for ${key}`)
+      return [...data] // Return a copy to prevent mutations
     }
   } catch (error) {
     console.error(`❌ Error reading data for ${key}:`, error)
-    console.log(`🔄 Returning empty array for ${key}`)
     return []
   }
 }
 
-// Write data to appropriate destination
+// Write data function
 const writeData = async (key, data) => {
   try {
-    let fileSuccess = false
-    let globalSuccess = false
-
-    // Always try to write to JSON file (for both dev and prod)
-    try {
+    if (isDevelopment) {
+      // Development: Write to JSON files
       const filePath = FILE_MAP[key]
-      if (filePath) {
-        ensureDataDirectory()
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8")
-        console.log(`💾 Successfully wrote ${data.length} items to ${key}.json`)
-        fileSuccess = true
+      if (!filePath) {
+        throw new Error(`Unknown data key: ${key}`)
       }
-    } catch (fileError) {
-      console.error(`⚠️ Could not write to ${key}.json:`, fileError.message)
-    }
 
-    // For production, also store in global memory
-    if (!isDevelopment) {
-      globalSuccess = setGlobalData(key, data)
+      ensureDataDirectory()
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8")
+      console.log(`💾 Wrote ${data.length} items to ${key}.json`)
+      return true
     } else {
-      globalSuccess = true // In development, file write is primary
+      // Production: Write to memory store
+      memoryStore[key] = [...data] // Store a copy
+      console.log(`💾 Wrote ${data.length} items to memory store for ${key}`)
+
+      // Also try to persist to a simple text-based storage if possible
+      try {
+        if (typeof process !== "undefined" && process.env) {
+          // Store as environment variable (limited but works for small data)
+          const dataString = JSON.stringify(data)
+          if (dataString.length < 32000) {
+            // Environment variable size limit
+            process.env[`ERP_DATA_${key.toUpperCase()}`] = dataString
+            console.log(`💾 Also stored ${key} in environment variable`)
+          }
+        }
+      } catch (envError) {
+        console.log(`⚠️ Could not store in environment: ${envError.message}`)
+      }
+
+      return true
     }
-
-    // Consider it successful if at least one method worked
-    const success = fileSuccess || globalSuccess
-
-    if (success) {
-      console.log(`✅ Data successfully saved for ${key}`)
-    } else {
-      console.error(`❌ Failed to save data for ${key}`)
-    }
-
-    return success
   } catch (error) {
     console.error(`❌ Error writing data for ${key}:`, error)
     return false
+  }
+}
+
+// Load data from environment variables on startup (production)
+const loadFromEnvironment = () => {
+  if (isDevelopment) return
+
+  try {
+    Object.keys(memoryStore).forEach((key) => {
+      const envKey = `ERP_DATA_${key.toUpperCase()}`
+      const envData = process.env[envKey]
+      if (envData) {
+        try {
+          const parsedData = JSON.parse(envData)
+          if (Array.isArray(parsedData)) {
+            memoryStore[key] = parsedData
+            console.log(`🔄 Loaded ${parsedData.length} items for ${key} from environment`)
+          }
+        } catch (parseError) {
+          console.log(`⚠️ Could not parse environment data for ${key}`)
+        }
+      }
+    })
+  } catch (error) {
+    console.log(`⚠️ Error loading from environment: ${error.message}`)
   }
 }
 
@@ -185,65 +164,43 @@ const generateId = () => {
 // Clear all data
 const clearAllData = async () => {
   try {
-    console.log("🧹 Starting to clear all data...")
+    console.log("🧹 Clearing all data...")
 
-    // Clear JSON files
-    const filesClearSuccess = clearAllDataFiles()
-
-    // Clear each data type using writeData to ensure consistency
-    const keys = Object.keys(initialData)
-    let writeSuccess = true
-
-    for (const key of keys) {
-      const success = await writeData(key, [])
-      if (!success) {
-        writeSuccess = false
-      }
+    for (const key of Object.keys(memoryStore)) {
+      await writeData(key, [])
     }
 
-    const overallSuccess = filesClearSuccess && writeSuccess
-
-    if (overallSuccess) {
-      console.log("✅ All data cleared successfully")
-    } else {
-      console.error("⚠️ Some data clearing operations failed")
-    }
-
-    return overallSuccess
+    console.log("✅ All data cleared successfully")
+    return true
   } catch (error) {
-    console.error("❌ Error clearing all data:", error)
+    console.error("❌ Error clearing data:", error)
     return false
   }
 }
 
-// Health check function
+// Health check
 const healthCheck = async () => {
   try {
     const results = {}
-    const fileStatus = {}
 
-    // Check each data type
-    for (const key of Object.keys(initialData)) {
+    for (const key of Object.keys(memoryStore)) {
       const data = await readData(key)
       results[key] = {
         count: data.length,
         lastUpdated: data.length > 0 ? data[0].updatedAt || data[0].createdAt : null,
-      }
-
-      // Check file existence
-      const filePath = FILE_MAP[key]
-      fileStatus[key] = {
-        exists: fs.existsSync(filePath),
-        path: filePath,
       }
     }
 
     return {
       status: "healthy",
       environment: isDevelopment ? "development" : "production",
-      dataStore: isDevelopment ? "file-system-primary" : "global-memory-with-file-backup",
+      storage: isDevelopment ? "file-system" : "memory-store",
+      isVercel: isVercel,
       data: results,
-      files: fileStatus,
+      memoryStoreSize: Object.keys(memoryStore).reduce((acc, key) => {
+        acc[key] = memoryStore[key].length
+        return acc
+      }, {}),
       timestamp: new Date().toISOString(),
     }
   } catch (error) {
@@ -257,11 +214,15 @@ const healthCheck = async () => {
 
 // Initialize on module load
 console.log("🚀 Initializing data handler...")
-initializeDataFiles()
 
-// Clear all data on startup to ensure fresh start
-clearAllDataFiles()
-console.log("✨ Data handler initialized with empty data")
+if (isDevelopment) {
+  initializeDataFiles()
+  console.log("📁 Development: Using file system storage")
+} else {
+  initializeMemoryStore()
+  loadFromEnvironment()
+  console.log("💾 Production: Using memory store")
+}
 
 module.exports = {
   readData,
@@ -269,5 +230,5 @@ module.exports = {
   generateId,
   healthCheck,
   clearAllData,
-  clearAllDataFiles,
+  memoryStore, // Export for debugging
 }
