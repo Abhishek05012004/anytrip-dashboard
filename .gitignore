@@ -1,1 +1,5 @@
-node_modules
+# Root ignore
+node_modules/
+.env
+dist/
+.DS_Store

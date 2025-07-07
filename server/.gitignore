@@ -1,3 +1,3 @@
-# Client ignore
+# Server ignore
 node_modules/
 .env
