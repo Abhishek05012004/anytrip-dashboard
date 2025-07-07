@@ -1,0 +1,18 @@
+{
+  "name": "erp-system",
+  "version": "1.0.0",
+  "description": "ERP System with React frontend and Express backend",
+  "scripts": {
+    "dev": "npm run dev:client",
+    "dev:client": "cd client && npm start",
+    "dev:server": "cd server && npm run dev",
+    "build": "cd client && npm run build",
+    "start": "cd server && npm start",
+    "install:client": "cd client && npm install",
+    "install:server": "cd server && npm install",
+    "install:all": "npm run install:client && npm run install:server"
+  },
+  "keywords": ["erp", "react", "express", "vercel"],
+  "author": "Your Name",
+  "license": "MIT"
+}

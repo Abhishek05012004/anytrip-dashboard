@@ -1,0 +1,24 @@
+[
+  {
+    "id": "1751897769711u5wvzwjcw",
+    "name": "kartik",
+    "description": "",
+    "url": "https://book-store7.netlify.app/",
+    "category": "Sales",
+    "status": "inactive",
+    "isPinned": false,
+    "createdAt": "2025-07-07T14:16:09.711Z",
+    "updatedAt": "2025-07-07T14:16:09.711Z"
+  },
+  {
+    "id": "1751718611072dltc5gqk8",
+    "name": "tripeay",
+    "description": "",
+    "url": "https://tripeasy.in/",
+    "category": "Finance",
+    "status": "completed",
+    "isPinned": true,
+    "createdAt": "2025-07-05T12:30:11.072Z",
+    "updatedAt": "2025-07-05T12:40:14.530Z"
+  }
+]
