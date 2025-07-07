@@ -1,13 +1,70 @@
-// Enhanced data handler with better persistence strategy
 const fs = require("fs")
 const path = require("path")
 
-// Check environment
-const isDevelopment = process.env.NODE_ENV !== "production"
-const isVercel = process.env.VERCEL === "1"
+// For Vercel deployment, we'll use a different approach
+// In production, we'll use environment variables or external storage
+// For now, let's use in-memory storage with initialization
 
-console.log(`🌍 Environment: ${isDevelopment ? "development" : "production"}`)
-console.log(`☁️ Vercel: ${isVercel ? "yes" : "no"}`)
+// Initial data
+const initialData = {
+  excelSheets: [
+    {
+      id: "1751718520090kty154xin",
+      name: "test",
+      description: "",
+      url: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+      category: "HR",
+      status: "inactive",
+      isPinned: true,
+      createdAt: "2025-07-05T12:28:40.090Z",
+      updatedAt: "2025-07-06T12:49:37.133Z",
+    },
+    {
+      id: "17517143634231aq3870n2",
+      name: "alis",
+      description: "",
+      url: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+      category: "HR",
+      status: "completed",
+      isPinned: false,
+      createdAt: "2025-07-05T11:19:23.423Z",
+      updatedAt: "2025-07-06T12:49:20.929Z",
+    },
+  ],
+  websiteLinks: [
+    {
+      id: "1751718611072dltc5gqk8",
+      name: "tripeay",
+      description: "",
+      url: "https://tripeasy.in/",
+      category: "Finance",
+      status: "completed",
+      isPinned: true,
+      createdAt: "2025-07-05T12:30:11.072Z",
+      updatedAt: "2025-07-05T12:40:14.530Z",
+    },
+  ],
+  tasks: [
+    {
+      id: "175171438958586t9rmwbe",
+      name: "abhishek",
+      description: "",
+      category: "HR",
+      status: "inactive",
+      priority: "low",
+      dueDate: "2025-07-15",
+      isPinned: true,
+      createdAt: "2025-07-05T11:19:49.585Z",
+      updatedAt: "2025-07-05T11:20:02.364Z",
+    },
+  ],
+}
+
+// In-memory storage for Vercel (since file system is read-only)
+const memoryStore = { ...initialData }
+
+// Check if we're in development or production
+const isDevelopment = process.env.NODE_ENV !== "production"
 
 // Data file paths (for development only)
 const DATA_DIR = path.join(__dirname, "..", "data")
@@ -17,29 +74,11 @@ const FILE_MAP = {
   tasks: path.join(DATA_DIR, "tasks.json"),
 }
 
-// In-memory storage for production (since Vercel filesystem is read-only)
-let memoryStore = {
-  excelSheets: [],
-  websiteLinks: [],
-  tasks: [],
-}
-
-// Initialize memory store with some sample data to test persistence
-const initializeMemoryStore = () => {
-  console.log("🔄 Initializing memory store...")
-  memoryStore = {
-    excelSheets: [],
-    websiteLinks: [],
-    tasks: [],
-  }
-  console.log("✅ Memory store initialized")
-}
-
-// Development file operations
+// Development functions
 const ensureDataDirectory = () => {
-  if (isDevelopment && !fs.existsSync(DATA_DIR)) {
+  if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true })
-    console.log("📁 Created data directory:", DATA_DIR)
+    console.log("Created data directory:", DATA_DIR)
   }
 }
 
@@ -47,16 +86,16 @@ const initializeDataFiles = () => {
   if (!isDevelopment) return
 
   ensureDataDirectory()
-  Object.keys(memoryStore).forEach((key) => {
+
+  Object.keys(initialData).forEach((key) => {
     const filePath = FILE_MAP[key]
     if (!fs.existsSync(filePath)) {
-      fs.writeFileSync(filePath, JSON.stringify([], null, 2))
-      console.log(`📄 Initialized ${key}.json`)
+      fs.writeFileSync(filePath, JSON.stringify(initialData[key], null, 2))
+      console.log(`Initialized ${key}.json`)
     }
   })
 }
 
-// Read data function
 const readData = async (key) => {
   try {
     if (isDevelopment) {
@@ -67,29 +106,25 @@ const readData = async (key) => {
       }
 
       if (!fs.existsSync(filePath)) {
-        console.log(`📄 File ${filePath} doesn't exist, creating...`)
-        ensureDataDirectory()
-        fs.writeFileSync(filePath, JSON.stringify([], null, 2))
-        return []
+        console.log(`File ${filePath} doesn't exist, initializing...`)
+        initializeDataFiles()
       }
 
-      const fileContent = fs.readFileSync(filePath, "utf8")
-      const data = JSON.parse(fileContent)
-      console.log(`📖 Read ${data.length} items from ${key}.json`)
-      return data
+      const data = fs.readFileSync(filePath, "utf8")
+      const parsedData = JSON.parse(data)
+      console.log(`Read ${parsedData.length} items from ${key}`)
+      return parsedData
     } else {
-      // Production: Use memory store
-      const data = memoryStore[key] || []
-      console.log(`📖 Read ${data.length} items from memory store for ${key}`)
-      return [...data] // Return a copy to prevent mutations
+      // Production: Use in-memory storage
+      console.log(`Read ${memoryStore[key]?.length || 0} items from ${key} (memory)`)
+      return memoryStore[key] || []
     }
   } catch (error) {
-    console.error(`❌ Error reading data for ${key}:`, error)
-    return []
+    console.error(`Error reading data for ${key}:`, error)
+    return initialData[key] || []
   }
 }
 
-// Write data function
 const writeData = async (key, data) => {
   try {
     if (isDevelopment) {
@@ -101,134 +136,30 @@ const writeData = async (key, data) => {
 
       ensureDataDirectory()
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8")
-      console.log(`💾 Wrote ${data.length} items to ${key}.json`)
-      return true
+      console.log(`Successfully wrote ${data.length} items to ${key}.json`)
     } else {
-      // Production: Write to memory store
-      memoryStore[key] = [...data] // Store a copy
-      console.log(`💾 Wrote ${data.length} items to memory store for ${key}`)
-
-      // Also try to persist to a simple text-based storage if possible
-      try {
-        if (typeof process !== "undefined" && process.env) {
-          // Store as environment variable (limited but works for small data)
-          const dataString = JSON.stringify(data)
-          if (dataString.length < 32000) {
-            // Environment variable size limit
-            process.env[`ERP_DATA_${key.toUpperCase()}`] = dataString
-            console.log(`💾 Also stored ${key} in environment variable`)
-          }
-        }
-      } catch (envError) {
-        console.log(`⚠️ Could not store in environment: ${envError.message}`)
-      }
-
-      return true
+      // Production: Update in-memory storage
+      memoryStore[key] = data
+      console.log(`Successfully wrote ${data.length} items to ${key} (memory)`)
     }
+    return true
   } catch (error) {
-    console.error(`❌ Error writing data for ${key}:`, error)
+    console.error(`Error writing data for ${key}:`, error)
     return false
   }
 }
 
-// Load data from environment variables on startup (production)
-const loadFromEnvironment = () => {
-  if (isDevelopment) return
-
-  try {
-    Object.keys(memoryStore).forEach((key) => {
-      const envKey = `ERP_DATA_${key.toUpperCase()}`
-      const envData = process.env[envKey]
-      if (envData) {
-        try {
-          const parsedData = JSON.parse(envData)
-          if (Array.isArray(parsedData)) {
-            memoryStore[key] = parsedData
-            console.log(`🔄 Loaded ${parsedData.length} items for ${key} from environment`)
-          }
-        } catch (parseError) {
-          console.log(`⚠️ Could not parse environment data for ${key}`)
-        }
-      }
-    })
-  } catch (error) {
-    console.log(`⚠️ Error loading from environment: ${error.message}`)
-  }
-}
-
-// Generate unique ID
 const generateId = () => {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9)
 }
 
-// Clear all data
-const clearAllData = async () => {
-  try {
-    console.log("🧹 Clearing all data...")
-
-    for (const key of Object.keys(memoryStore)) {
-      await writeData(key, [])
-    }
-
-    console.log("✅ All data cleared successfully")
-    return true
-  } catch (error) {
-    console.error("❌ Error clearing data:", error)
-    return false
-  }
-}
-
-// Health check
-const healthCheck = async () => {
-  try {
-    const results = {}
-
-    for (const key of Object.keys(memoryStore)) {
-      const data = await readData(key)
-      results[key] = {
-        count: data.length,
-        lastUpdated: data.length > 0 ? data[0].updatedAt || data[0].createdAt : null,
-      }
-    }
-
-    return {
-      status: "healthy",
-      environment: isDevelopment ? "development" : "production",
-      storage: isDevelopment ? "file-system" : "memory-store",
-      isVercel: isVercel,
-      data: results,
-      memoryStoreSize: Object.keys(memoryStore).reduce((acc, key) => {
-        acc[key] = memoryStore[key].length
-        return acc
-      }, {}),
-      timestamp: new Date().toISOString(),
-    }
-  } catch (error) {
-    return {
-      status: "error",
-      error: error.message,
-      timestamp: new Date().toISOString(),
-    }
-  }
-}
-
-// Initialize on module load
-console.log("🚀 Initializing data handler...")
-
+// Initialize data files when module loads (development only)
 if (isDevelopment) {
   initializeDataFiles()
-  console.log("📁 Development: Using file system storage")
-} else {
-  initializeMemoryStore()
-  loadFromEnvironment()
-  console.log("💾 Production: Using memory store")
 }
 
 module.exports = {
   readData,
   writeData,
   generateId,
-  healthCheck,
-  clearAllData,
-  memoryStore, // Export for debugging
 }
