@@ -5,22 +5,17 @@ const bodyParser = require("body-parser")
 const app = express()
 const PORT = process.env.PORT || 5000
 
-// CORS configuration - Initially allow all origins, we'll update this after client deployment
+// CORS configuration - Updated with your client domain
 const corsOptions = {
   origin:
     process.env.NODE_ENV === "production"
       ? [
-          "https://your-client-domain.vercel.app", // We'll update this after client deployment
-          "https://*.vercel.app", // Allow all Vercel preview deployments for now
+          "https://anytrip-dashboard-client.vercel.app",
+          "https://*.vercel.app", // Allow preview deployments
         ]
       : "http://localhost:3000",
   credentials: true,
   optionsSuccessStatus: 200,
-}
-
-// For initial deployment, allow all origins temporarily
-if (process.env.NODE_ENV === "production") {
-  corsOptions.origin = true // Allow all origins temporarily
 }
 
 // Middleware
