@@ -28,8 +28,13 @@ app.options("*", cors(corsOptions))
 // Import data handler
 const { readData, writeData, generateId, healthCheck, clearAllData } = require("./utils/dataHandler")
 
-// Utility function to ensure data consistency
-const ensureDataConsistency = async (data, type) => {
+// Utility function to validate and ensure data consistency
+const validateAndCleanData = (data, type) => {
+  if (!Array.isArray(data)) {
+    console.warn(`⚠️ Data for ${type} is not an array, converting...`)
+    return []
+  }
+
   return data.map((item) => ({
     ...item,
     id: item.id || generateId(),
@@ -41,11 +46,11 @@ const ensureDataConsistency = async (data, type) => {
 // Excel Sheets Routes
 app.get("/api/excel-sheets", async (req, res) => {
   try {
-    console.log("📊 Fetching excel sheets...")
+    console.log("📊 GET /api/excel-sheets - Fetching excel sheets...")
     const sheets = await readData("excelSheets")
-    const consistentSheets = await ensureDataConsistency(sheets, "excelSheets")
-    console.log(`✅ Found ${consistentSheets.length} excel sheets`)
-    res.json(consistentSheets)
+    const cleanSheets = validateAndCleanData(sheets, "excelSheets")
+    console.log(`✅ Returning ${cleanSheets.length} excel sheets`)
+    res.json(cleanSheets)
   } catch (error) {
     console.error("❌ Error fetching excel sheets:", error)
     res.status(500).json({ message: "Error fetching excel sheets", error: error.message })
@@ -54,16 +59,19 @@ app.get("/api/excel-sheets", async (req, res) => {
 
 app.get("/api/excel-sheets/:id", async (req, res) => {
   try {
+    console.log(`📊 GET /api/excel-sheets/${req.params.id}`)
     const sheets = await readData("excelSheets")
     const sheet = sheets.find((s) => s.id === req.params.id)
 
     if (!sheet) {
+      console.log(`❌ Excel sheet not found: ${req.params.id}`)
       return res.status(404).json({ message: "Excel sheet not found" })
     }
 
+    console.log(`✅ Found excel sheet: ${sheet.name}`)
     res.json(sheet)
   } catch (error) {
-    console.error("Error fetching excel sheet:", error)
+    console.error("❌ Error fetching excel sheet:", error)
     res.status(500).json({ message: "Error fetching excel sheet" })
   }
 })
@@ -71,21 +79,22 @@ app.get("/api/excel-sheets/:id", async (req, res) => {
 app.post("/api/excel-sheets", async (req, res) => {
   try {
     const { name, description, url, category, status, isPinned } = req.body
+    console.log("📊 POST /api/excel-sheets - Creating new excel sheet:", { name, category })
 
     if (!name || !url) {
       return res.status(400).json({ message: "Name and URL are required" })
     }
 
-    console.log("📝 Creating new excel sheet:", { name, category })
-
-    // Get current data
+    // Read current data
     const sheets = await readData("excelSheets")
+    console.log(`📖 Current sheets count: ${sheets.length}`)
 
+    // Create new sheet
     const newSheet = {
       id: generateId(),
-      name,
-      description: description || "",
-      url,
+      name: name.trim(),
+      description: (description || "").trim(),
+      url: url.trim(),
       category: category || "Finance",
       status: status || "pending",
       isPinned: isPinned || false,
@@ -95,15 +104,16 @@ app.post("/api/excel-sheets", async (req, res) => {
 
     // Add to beginning of array
     const updatedSheets = [newSheet, ...sheets]
+    console.log(`📝 Adding new sheet. New total: ${updatedSheets.length}`)
 
-    // Save immediately
+    // Save immediately to JSON file
     const success = await writeData("excelSheets", updatedSheets)
 
     if (success) {
-      console.log("✅ Excel sheet created and saved:", newSheet.id)
+      console.log(`✅ Excel sheet created and saved: ${newSheet.id}`)
       res.status(201).json(newSheet)
     } else {
-      console.error("❌ Failed to save excel sheet")
+      console.error("❌ Failed to save excel sheet to file")
       res.status(500).json({ message: "Error saving excel sheet" })
     }
   } catch (error) {
@@ -115,35 +125,39 @@ app.post("/api/excel-sheets", async (req, res) => {
 app.put("/api/excel-sheets/:id", async (req, res) => {
   try {
     const { name, description, url, category, status, isPinned } = req.body
-    console.log(`📝 Updating excel sheet ${req.params.id}`)
+    console.log(`📊 PUT /api/excel-sheets/${req.params.id} - Updating excel sheet`)
 
+    // Read current data
     const sheets = await readData("excelSheets")
     const sheetIndex = sheets.findIndex((s) => s.id === req.params.id)
 
     if (sheetIndex === -1) {
+      console.log(`❌ Excel sheet not found for update: ${req.params.id}`)
       return res.status(404).json({ message: "Excel sheet not found" })
     }
+
+    console.log(`📝 Updating sheet at index ${sheetIndex}: ${sheets[sheetIndex].name}`)
 
     // Update the sheet
     sheets[sheetIndex] = {
       ...sheets[sheetIndex],
-      name: name !== undefined ? name : sheets[sheetIndex].name,
-      description: description !== undefined ? description : sheets[sheetIndex].description,
-      url: url !== undefined ? url : sheets[sheetIndex].url,
+      name: name !== undefined ? name.trim() : sheets[sheetIndex].name,
+      description: description !== undefined ? description.trim() : sheets[sheetIndex].description,
+      url: url !== undefined ? url.trim() : sheets[sheetIndex].url,
       category: category !== undefined ? category : sheets[sheetIndex].category,
       status: status !== undefined ? status : sheets[sheetIndex].status,
       isPinned: isPinned !== undefined ? isPinned : sheets[sheetIndex].isPinned,
       updatedAt: new Date().toISOString(),
     }
 
-    // Save immediately
+    // Save immediately to JSON file
     const success = await writeData("excelSheets", sheets)
 
     if (success) {
-      console.log("✅ Excel sheet updated:", req.params.id)
+      console.log(`✅ Excel sheet updated and saved: ${req.params.id}`)
       res.json(sheets[sheetIndex])
     } else {
-      console.error("❌ Failed to update excel sheet")
+      console.error("❌ Failed to update excel sheet in file")
       res.status(500).json({ message: "Error updating excel sheet" })
     }
   } catch (error) {
@@ -154,24 +168,32 @@ app.put("/api/excel-sheets/:id", async (req, res) => {
 
 app.delete("/api/excel-sheets/:id", async (req, res) => {
   try {
-    console.log(`🗑️ Deleting excel sheet ${req.params.id}`)
+    console.log(`📊 DELETE /api/excel-sheets/${req.params.id} - Deleting excel sheet`)
 
+    // Read current data
     const sheets = await readData("excelSheets")
     const originalLength = sheets.length
-    const filteredSheets = sheets.filter((s) => s.id !== req.params.id)
+    const sheetToDelete = sheets.find((s) => s.id === req.params.id)
 
-    if (originalLength === filteredSheets.length) {
+    if (!sheetToDelete) {
+      console.log(`❌ Excel sheet not found for deletion: ${req.params.id}`)
       return res.status(404).json({ message: "Excel sheet not found" })
     }
 
-    // Save immediately
+    console.log(`🗑️ Deleting sheet: ${sheetToDelete.name}`)
+
+    // Filter out the sheet to delete
+    const filteredSheets = sheets.filter((s) => s.id !== req.params.id)
+    console.log(`📝 Sheets count: ${originalLength} -> ${filteredSheets.length}`)
+
+    // Save immediately to JSON file
     const success = await writeData("excelSheets", filteredSheets)
 
     if (success) {
-      console.log("✅ Excel sheet deleted:", req.params.id)
+      console.log(`✅ Excel sheet deleted and saved: ${req.params.id}`)
       res.json({ message: "Excel sheet deleted successfully" })
     } else {
-      console.error("❌ Failed to delete excel sheet")
+      console.error("❌ Failed to delete excel sheet from file")
       res.status(500).json({ message: "Error deleting excel sheet" })
     }
   } catch (error) {
@@ -180,14 +202,14 @@ app.delete("/api/excel-sheets/:id", async (req, res) => {
   }
 })
 
-// Website Links Routes (similar pattern)
+// Website Links Routes
 app.get("/api/website-links", async (req, res) => {
   try {
-    console.log("🔗 Fetching website links...")
+    console.log("🔗 GET /api/website-links - Fetching website links...")
     const links = await readData("websiteLinks")
-    const consistentLinks = await ensureDataConsistency(links, "websiteLinks")
-    console.log(`✅ Found ${consistentLinks.length} website links`)
-    res.json(consistentLinks)
+    const cleanLinks = validateAndCleanData(links, "websiteLinks")
+    console.log(`✅ Returning ${cleanLinks.length} website links`)
+    res.json(cleanLinks)
   } catch (error) {
     console.error("❌ Error fetching website links:", error)
     res.status(500).json({ message: "Error fetching website links", error: error.message })
@@ -197,19 +219,18 @@ app.get("/api/website-links", async (req, res) => {
 app.post("/api/website-links", async (req, res) => {
   try {
     const { name, description, url, category, status, isPinned } = req.body
+    console.log("🔗 POST /api/website-links - Creating new website link:", { name, category })
 
     if (!name || !url) {
       return res.status(400).json({ message: "Name and URL are required" })
     }
 
-    console.log("📝 Creating new website link:", { name, category })
-
     const links = await readData("websiteLinks")
     const newLink = {
       id: generateId(),
-      name,
-      description: description || "",
-      url,
+      name: name.trim(),
+      description: (description || "").trim(),
+      url: url.trim(),
       category: category || "Finance",
       status: status || "pending",
       isPinned: isPinned || false,
@@ -221,9 +242,10 @@ app.post("/api/website-links", async (req, res) => {
     const success = await writeData("websiteLinks", updatedLinks)
 
     if (success) {
-      console.log("✅ Website link created:", newLink.id)
+      console.log(`✅ Website link created and saved: ${newLink.id}`)
       res.status(201).json(newLink)
     } else {
+      console.error("❌ Failed to save website link")
       res.status(500).json({ message: "Error saving website link" })
     }
   } catch (error) {
@@ -235,7 +257,7 @@ app.post("/api/website-links", async (req, res) => {
 app.put("/api/website-links/:id", async (req, res) => {
   try {
     const { name, description, url, category, status, isPinned } = req.body
-    console.log(`📝 Updating website link ${req.params.id}`)
+    console.log(`🔗 PUT /api/website-links/${req.params.id} - Updating website link`)
 
     const links = await readData("websiteLinks")
     const linkIndex = links.findIndex((l) => l.id === req.params.id)
@@ -246,9 +268,9 @@ app.put("/api/website-links/:id", async (req, res) => {
 
     links[linkIndex] = {
       ...links[linkIndex],
-      name: name !== undefined ? name : links[linkIndex].name,
-      description: description !== undefined ? description : links[linkIndex].description,
-      url: url !== undefined ? url : links[linkIndex].url,
+      name: name !== undefined ? name.trim() : links[linkIndex].name,
+      description: description !== undefined ? description.trim() : links[linkIndex].description,
+      url: url !== undefined ? url.trim() : links[linkIndex].url,
       category: category !== undefined ? category : links[linkIndex].category,
       status: status !== undefined ? status : links[linkIndex].status,
       isPinned: isPinned !== undefined ? isPinned : links[linkIndex].isPinned,
@@ -258,7 +280,7 @@ app.put("/api/website-links/:id", async (req, res) => {
     const success = await writeData("websiteLinks", links)
 
     if (success) {
-      console.log("✅ Website link updated:", req.params.id)
+      console.log(`✅ Website link updated and saved: ${req.params.id}`)
       res.json(links[linkIndex])
     } else {
       res.status(500).json({ message: "Error updating website link" })
@@ -271,19 +293,22 @@ app.put("/api/website-links/:id", async (req, res) => {
 
 app.delete("/api/website-links/:id", async (req, res) => {
   try {
-    console.log(`🗑️ Deleting website link ${req.params.id}`)
+    console.log(`🔗 DELETE /api/website-links/${req.params.id} - Deleting website link`)
 
     const links = await readData("websiteLinks")
-    const filteredLinks = links.filter((l) => l.id !== req.params.id)
+    const linkToDelete = links.find((l) => l.id === req.params.id)
 
-    if (links.length === filteredLinks.length) {
+    if (!linkToDelete) {
       return res.status(404).json({ message: "Website link not found" })
     }
+
+    console.log(`🗑️ Deleting link: ${linkToDelete.name}`)
+    const filteredLinks = links.filter((l) => l.id !== req.params.id)
 
     const success = await writeData("websiteLinks", filteredLinks)
 
     if (success) {
-      console.log("✅ Website link deleted:", req.params.id)
+      console.log(`✅ Website link deleted and saved: ${req.params.id}`)
       res.json({ message: "Website link deleted successfully" })
     } else {
       res.status(500).json({ message: "Error deleting website link" })
@@ -294,14 +319,14 @@ app.delete("/api/website-links/:id", async (req, res) => {
   }
 })
 
-// Tasks Routes (similar pattern)
+// Tasks Routes
 app.get("/api/tasks", async (req, res) => {
   try {
-    console.log("📋 Fetching tasks...")
+    console.log("📋 GET /api/tasks - Fetching tasks...")
     const tasks = await readData("tasks")
-    const consistentTasks = await ensureDataConsistency(tasks, "tasks")
-    console.log(`✅ Found ${consistentTasks.length} tasks`)
-    res.json(consistentTasks)
+    const cleanTasks = validateAndCleanData(tasks, "tasks")
+    console.log(`✅ Returning ${cleanTasks.length} tasks`)
+    res.json(cleanTasks)
   } catch (error) {
     console.error("❌ Error fetching tasks:", error)
     res.status(500).json({ message: "Error fetching tasks", error: error.message })
@@ -311,18 +336,17 @@ app.get("/api/tasks", async (req, res) => {
 app.post("/api/tasks", async (req, res) => {
   try {
     const { name, description, category, status, priority, dueDate, isPinned } = req.body
+    console.log("📋 POST /api/tasks - Creating new task:", { name, category })
 
     if (!name) {
       return res.status(400).json({ message: "Name is required" })
     }
 
-    console.log("📝 Creating new task:", { name, category })
-
     const tasks = await readData("tasks")
     const newTask = {
       id: generateId(),
-      name,
-      description: description || "",
+      name: name.trim(),
+      description: (description || "").trim(),
       category: category || "Finance",
       status: status || "pending",
       priority: priority || "medium",
@@ -336,7 +360,7 @@ app.post("/api/tasks", async (req, res) => {
     const success = await writeData("tasks", updatedTasks)
 
     if (success) {
-      console.log("✅ Task created:", newTask.id)
+      console.log(`✅ Task created and saved: ${newTask.id}`)
       res.status(201).json(newTask)
     } else {
       res.status(500).json({ message: "Error saving task" })
@@ -350,7 +374,7 @@ app.post("/api/tasks", async (req, res) => {
 app.put("/api/tasks/:id", async (req, res) => {
   try {
     const { name, description, category, status, priority, dueDate, isPinned } = req.body
-    console.log(`📝 Updating task ${req.params.id}`)
+    console.log(`📋 PUT /api/tasks/${req.params.id} - Updating task`)
 
     const tasks = await readData("tasks")
     const taskIndex = tasks.findIndex((t) => t.id === req.params.id)
@@ -361,8 +385,8 @@ app.put("/api/tasks/:id", async (req, res) => {
 
     tasks[taskIndex] = {
       ...tasks[taskIndex],
-      name: name !== undefined ? name : tasks[taskIndex].name,
-      description: description !== undefined ? description : tasks[taskIndex].description,
+      name: name !== undefined ? name.trim() : tasks[taskIndex].name,
+      description: description !== undefined ? description.trim() : tasks[taskIndex].description,
       category: category !== undefined ? category : tasks[taskIndex].category,
       status: status !== undefined ? status : tasks[taskIndex].status,
       priority: priority !== undefined ? priority : tasks[taskIndex].priority,
@@ -374,7 +398,7 @@ app.put("/api/tasks/:id", async (req, res) => {
     const success = await writeData("tasks", tasks)
 
     if (success) {
-      console.log("✅ Task updated:", req.params.id)
+      console.log(`✅ Task updated and saved: ${req.params.id}`)
       res.json(tasks[taskIndex])
     } else {
       res.status(500).json({ message: "Error updating task" })
@@ -387,19 +411,22 @@ app.put("/api/tasks/:id", async (req, res) => {
 
 app.delete("/api/tasks/:id", async (req, res) => {
   try {
-    console.log(`🗑️ Deleting task ${req.params.id}`)
+    console.log(`📋 DELETE /api/tasks/${req.params.id} - Deleting task`)
 
     const tasks = await readData("tasks")
-    const filteredTasks = tasks.filter((t) => t.id !== req.params.id)
+    const taskToDelete = tasks.find((t) => t.id === req.params.id)
 
-    if (tasks.length === filteredTasks.length) {
+    if (!taskToDelete) {
       return res.status(404).json({ message: "Task not found" })
     }
+
+    console.log(`🗑️ Deleting task: ${taskToDelete.name}`)
+    const filteredTasks = tasks.filter((t) => t.id !== req.params.id)
 
     const success = await writeData("tasks", filteredTasks)
 
     if (success) {
-      console.log("✅ Task deleted:", req.params.id)
+      console.log(`✅ Task deleted and saved: ${req.params.id}`)
       res.json({ message: "Task deleted successfully" })
     } else {
       res.status(500).json({ message: "Error deleting task" })
@@ -410,14 +437,19 @@ app.delete("/api/tasks/:id", async (req, res) => {
   }
 })
 
-// Clear all data endpoint (for testing)
+// Clear all data endpoint
 app.post("/api/clear-all", async (req, res) => {
   try {
-    console.log("🧹 Clearing all data...")
+    console.log("🧹 POST /api/clear-all - Clearing all data...")
     const success = await clearAllData()
     if (success) {
-      res.json({ message: "All data cleared successfully" })
+      console.log("✅ All data cleared successfully")
+      res.json({
+        message: "All data cleared successfully",
+        timestamp: new Date().toISOString(),
+      })
     } else {
+      console.error("❌ Failed to clear all data")
       res.status(500).json({ message: "Error clearing data" })
     }
   } catch (error) {
@@ -426,9 +458,9 @@ app.post("/api/clear-all", async (req, res) => {
   }
 })
 
-// Enhanced health check route
+// Health check route
 app.get("/api/health", async (req, res) => {
-  console.log("🏥 Health check requested")
+  console.log("🏥 GET /api/health - Health check requested")
   try {
     const healthData = await healthCheck()
     res.json({
@@ -450,15 +482,25 @@ app.get("/api/health", async (req, res) => {
 // Root route
 app.get("/", (req, res) => {
   res.json({
-    message: "ERP API Server",
-    version: "2.0.0",
+    message: "ERP API Server - Fresh Start",
+    version: "2.1.0",
     server: "https://anytrip-dashboard-ten.vercel.app",
+    status: "All data cleared - Starting fresh",
     endpoints: [
       "GET /",
       "GET /api/health",
       "GET /api/excel-sheets",
+      "POST /api/excel-sheets",
+      "PUT /api/excel-sheets/:id",
+      "DELETE /api/excel-sheets/:id",
       "GET /api/website-links",
+      "POST /api/website-links",
+      "PUT /api/website-links/:id",
+      "DELETE /api/website-links/:id",
       "GET /api/tasks",
+      "POST /api/tasks",
+      "PUT /api/tasks/:id",
+      "DELETE /api/tasks/:id",
       "POST /api/clear-all",
     ],
   })
@@ -468,6 +510,7 @@ app.get("/", (req, res) => {
 if (process.env.NODE_ENV !== "production") {
   app.listen(PORT, () => {
     console.log(`🚀 Server is running on port ${PORT}`)
+    console.log(`📁 Data will be saved to JSON files in development mode`)
   })
 }
 
