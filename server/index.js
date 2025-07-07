@@ -7,15 +7,16 @@ const PORT = process.env.PORT || 5000
 
 // CORS configuration - Updated with your client domain
 const corsOptions = {
-  origin:
-    process.env.NODE_ENV === "production"
-      ? [
-          "https://anytrip-dashboard-client.vercel.app",
-          "https://*.vercel.app", // Allow preview deployments
-        ]
-      : "http://localhost:3000",
+  origin: [
+    "https://anytrip-dashboard-client.vercel.app",
+    "https://anytrip-dashboard-ten.vercel.app",
+    "http://localhost:3000",
+    /\.vercel\.app$/, // Allow all vercel preview deployments
+  ],
   credentials: true,
   optionsSuccessStatus: 200,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 }
 
 // Middleware
@@ -23,17 +24,22 @@ app.use(cors(corsOptions))
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: true }))
 
+// Add preflight handling
+app.options("*", cors(corsOptions))
+
 // Import data handler
 const { readData, writeData, generateId } = require("./utils/dataHandler")
 
 // Excel Sheets Routes
 app.get("/api/excel-sheets", async (req, res) => {
   try {
+    console.log("📊 Fetching excel sheets...")
     const sheets = await readData("excelSheets")
+    console.log(`✅ Found ${sheets.length} excel sheets`)
     res.json(sheets)
   } catch (error) {
-    console.error("Error fetching excel sheets:", error)
-    res.status(500).json({ message: "Error fetching excel sheets" })
+    console.error("❌ Error fetching excel sheets:", error)
+    res.status(500).json({ message: "Error fetching excel sheets", error: error.message })
   }
 })
 
@@ -150,11 +156,13 @@ app.delete("/api/excel-sheets/:id", async (req, res) => {
 // Website Links Routes
 app.get("/api/website-links", async (req, res) => {
   try {
+    console.log("🔗 Fetching website links...")
     const links = await readData("websiteLinks")
+    console.log(`✅ Found ${links.length} website links`)
     res.json(links)
   } catch (error) {
-    console.error("Error fetching website links:", error)
-    res.status(500).json({ message: "Error fetching website links" })
+    console.error("❌ Error fetching website links:", error)
+    res.status(500).json({ message: "Error fetching website links", error: error.message })
   }
 })
 
@@ -271,11 +279,13 @@ app.delete("/api/website-links/:id", async (req, res) => {
 // Tasks Routes
 app.get("/api/tasks", async (req, res) => {
   try {
+    console.log("📋 Fetching tasks...")
     const tasks = await readData("tasks")
+    console.log(`✅ Found ${tasks.length} tasks`)
     res.json(tasks)
   } catch (error) {
-    console.error("Error fetching tasks:", error)
-    res.status(500).json({ message: "Error fetching tasks" })
+    console.error("❌ Error fetching tasks:", error)
+    res.status(500).json({ message: "Error fetching tasks", error: error.message })
   }
 })
 
@@ -393,10 +403,12 @@ app.delete("/api/tasks/:id", async (req, res) => {
 
 // Health check route
 app.get("/api/health", (req, res) => {
+  console.log("🏥 Health check requested")
   res.json({
     message: "ERP Server is running successfully!",
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development",
+    server: "https://anytrip-dashboard-ten.vercel.app",
   })
 })
 
@@ -405,7 +417,19 @@ app.get("/", (req, res) => {
   res.json({
     message: "ERP API Server",
     version: "1.0.0",
-    endpoints: ["GET /api/health", "GET /api/excel-sheets", "GET /api/website-links", "GET /api/tasks"],
+    server: "https://anytrip-dashboard-ten.vercel.app",
+    endpoints: ["GET /", "GET /api/health", "GET /api/excel-sheets", "GET /api/website-links", "GET /api/tasks"],
+  })
+})
+
+// Catch-all route for debugging
+app.get("*", (req, res) => {
+  console.log(`🔍 Unmatched route: ${req.method} ${req.path}`)
+  res.status(404).json({
+    message: "Route not found",
+    path: req.path,
+    method: req.method,
+    availableRoutes: ["GET /", "GET /api/health", "GET /api/excel-sheets", "GET /api/website-links", "GET /api/tasks"],
   })
 })
 
