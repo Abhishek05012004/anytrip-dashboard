@@ -1,7 +1,7 @@
 import axios from "axios"
 
-// API base URL - Update this with your deployed server URL
-const API_BASE_URL = process.env.REACT_APP_API_URL || "https://your-server-name.vercel.app/api"
+// API base URL - Updated with your deployed server URL
+const API_BASE_URL = process.env.REACT_APP_API_URL || "https://anytrip-dashboard-ten.vercel.app/api"
 
 const api = axios.create({
   baseURL: API_BASE_URL,
