@@ -1,6 +1,6 @@
 import axios from "axios"
 
-// API base URL - Updated with your deployed server URL
+// API base URL - Updated to use the correct server URL
 const API_BASE_URL = process.env.REACT_APP_API_URL || "https://anytrip-dashboard-ten.vercel.app/api"
 
 const api = axios.create({
@@ -8,18 +8,49 @@ const api = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
+  timeout: 10000, // 10 second timeout
 })
 
-// Add request interceptor for error handling
-api.interceptors.response.use(
-  (response) => response,
+// Add request interceptor for debugging
+api.interceptors.request.use(
+  (config) => {
+    console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`)
+    console.log(`🔗 Full URL: ${config.baseURL}${config.url}`)
+    return config
+  },
   (error) => {
-    console.error("API Error:", error)
+    console.error("❌ Request Error:", error)
+    return Promise.reject(error)
+  },
+)
+
+// Add response interceptor for error handling
+api.interceptors.response.use(
+  (response) => {
+    console.log(`✅ API Response: ${response.status} ${response.config.url}`)
+    return response
+  },
+  (error) => {
+    console.error("❌ API Error:", error)
+    if (error.response) {
+      console.error("Response data:", error.response.data)
+      console.error("Response status:", error.response.status)
+    } else if (error.request) {
+      console.error("No response received:", error.request)
+    } else {
+      console.error("Error setting up request:", error.message)
+    }
     return Promise.reject(error)
   },
 )
 
 export const apiService = {
+  // Health check
+  healthCheck: async () => {
+    const response = await api.get("/health")
+    return response.data
+  },
+
   // Excel Sheets API
   getExcelSheets: async () => {
     const response = await api.get("/excel-sheets")
