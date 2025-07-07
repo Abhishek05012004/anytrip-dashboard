@@ -5,8 +5,21 @@ const bodyParser = require("body-parser")
 const app = express()
 const PORT = process.env.PORT || 5000
 
+// CORS configuration for production
+const corsOptions = {
+  origin:
+    process.env.NODE_ENV === "production"
+      ? [
+          "https://your-client-domain.vercel.app", // Will update this after client deployment
+          "https://*.vercel.app", // Allow all Vercel preview deployments
+        ]
+      : "http://localhost:3000",
+  credentials: true,
+  optionsSuccessStatus: 200,
+}
+
 // Middleware
-app.use(cors())
+app.use(cors(corsOptions))
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: true }))
 
@@ -65,7 +78,7 @@ app.post("/api/excel-sheets", async (req, res) => {
     const success = await writeData("excelSheets", sheets)
 
     if (success) {
-      console.log("✅ Excel sheet created and saved to JSON file")
+      console.log("✅ Excel sheet created and saved")
       res.status(201).json(newSheet)
     } else {
       res.status(500).json({ message: "Error saving excel sheet" })
@@ -100,7 +113,7 @@ app.put("/api/excel-sheets/:id", async (req, res) => {
     const success = await writeData("excelSheets", sheets)
 
     if (success) {
-      console.log("✅ Excel sheet updated and saved to JSON file")
+      console.log("✅ Excel sheet updated and saved")
       res.json(sheets[sheetIndex])
     } else {
       res.status(500).json({ message: "Error updating excel sheet" })
@@ -123,7 +136,7 @@ app.delete("/api/excel-sheets/:id", async (req, res) => {
     const success = await writeData("excelSheets", filteredSheets)
 
     if (success) {
-      console.log("✅ Excel sheet deleted and JSON file updated")
+      console.log("✅ Excel sheet deleted")
       res.json({ message: "Excel sheet deleted successfully" })
     } else {
       res.status(500).json({ message: "Error deleting excel sheet" })
@@ -186,7 +199,7 @@ app.post("/api/website-links", async (req, res) => {
     const success = await writeData("websiteLinks", links)
 
     if (success) {
-      console.log("✅ Website link created and saved to JSON file")
+      console.log("✅ Website link created and saved")
       res.status(201).json(newLink)
     } else {
       res.status(500).json({ message: "Error saving website link" })
@@ -221,7 +234,7 @@ app.put("/api/website-links/:id", async (req, res) => {
     const success = await writeData("websiteLinks", links)
 
     if (success) {
-      console.log("✅ Website link updated and saved to JSON file")
+      console.log("✅ Website link updated and saved")
       res.json(links[linkIndex])
     } else {
       res.status(500).json({ message: "Error updating website link" })
@@ -244,7 +257,7 @@ app.delete("/api/website-links/:id", async (req, res) => {
     const success = await writeData("websiteLinks", filteredLinks)
 
     if (success) {
-      console.log("✅ Website link deleted and JSON file updated")
+      console.log("✅ Website link deleted")
       res.json({ message: "Website link deleted successfully" })
     } else {
       res.status(500).json({ message: "Error deleting website link" })
@@ -308,7 +321,7 @@ app.post("/api/tasks", async (req, res) => {
     const success = await writeData("tasks", tasks)
 
     if (success) {
-      console.log("✅ Task created and saved to JSON file")
+      console.log("✅ Task created and saved")
       res.status(201).json(newTask)
     } else {
       res.status(500).json({ message: "Error saving task" })
@@ -344,7 +357,7 @@ app.put("/api/tasks/:id", async (req, res) => {
     const success = await writeData("tasks", tasks)
 
     if (success) {
-      console.log("✅ Task updated and saved to JSON file")
+      console.log("✅ Task updated and saved")
       res.json(tasks[taskIndex])
     } else {
       res.status(500).json({ message: "Error updating task" })
@@ -367,7 +380,7 @@ app.delete("/api/tasks/:id", async (req, res) => {
     const success = await writeData("tasks", filteredTasks)
 
     if (success) {
-      console.log("✅ Task deleted and JSON file updated")
+      console.log("✅ Task deleted")
       res.json({ message: "Task deleted successfully" })
     } else {
       res.status(500).json({ message: "Error deleting task" })
@@ -380,13 +393,26 @@ app.delete("/api/tasks/:id", async (req, res) => {
 
 // Health check route
 app.get("/api/health", (req, res) => {
-  res.json({ message: "Server is running successfully!" })
+  res.json({
+    message: "ERP Server is running successfully!",
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || "development",
+  })
+})
+
+// Root route
+app.get("/", (req, res) => {
+  res.json({
+    message: "ERP API Server",
+    version: "1.0.0",
+    endpoints: ["GET /api/health", "GET /api/excel-sheets", "GET /api/website-links", "GET /api/tasks"],
+  })
 })
 
 // For local development
 if (process.env.NODE_ENV !== "production") {
   app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`)
+    console.log(`🚀 Server is running on port ${PORT}`)
   })
 }
 
