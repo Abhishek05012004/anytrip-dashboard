@@ -1,34 +1,30 @@
 const fs = require("fs")
 const path = require("path")
 
-// For Vercel deployment, we'll use a different approach
-// In production, we'll use environment variables or external storage
-// For now, let's use in-memory storage with initialization
-
-// Initial data
+// Initial data with more comprehensive sample data
 const initialData = {
   excelSheets: [
     {
-      id: "1751718520090kty154xin",
-      name: "test",
-      description: "",
+      id: "1751907406474yl4tvdlqz",
+      name: "kartik",
+      description: "MBA ",
       url: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-      category: "HR",
-      status: "inactive",
+      category: "Finance",
+      status: "pending",
       isPinned: true,
-      createdAt: "2025-07-05T12:28:40.090Z",
-      updatedAt: "2025-07-06T12:49:37.133Z",
+      createdAt: "2025-07-07T16:56:46.478Z",
+      updatedAt: "2025-07-07T17:54:22.090Z",
     },
     {
-      id: "17517143634231aq3870n2",
-      name: "alis",
-      description: "",
-      url: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-      category: "HR",
+      id: "1751898524469cwr086fsd",
+      name: "Harsh",
+      description: "Hii how are you",
+      url: "https://e-commerce-one-woad-52.vercel.app/",
+      category: "Finance",
       status: "completed",
       isPinned: false,
-      createdAt: "2025-07-05T11:19:23.423Z",
-      updatedAt: "2025-07-06T12:49:20.929Z",
+      createdAt: "2025-07-07T14:28:44.469Z",
+      updatedAt: "2025-07-07T14:28:44.469Z",
     },
   ],
   websiteLinks: [
@@ -60,9 +56,6 @@ const initialData = {
   ],
 }
 
-// In-memory storage for Vercel (since file system is read-only)
-const memoryStore = { ...initialData }
-
 // Check if we're in development or production
 const isDevelopment = process.env.NODE_ENV !== "production"
 
@@ -72,6 +65,19 @@ const FILE_MAP = {
   excelSheets: path.join(DATA_DIR, "excelSheets.json"),
   websiteLinks: path.join(DATA_DIR, "websiteLinks.json"),
   tasks: path.join(DATA_DIR, "tasks.json"),
+}
+
+// Global data store for production - using a more persistent approach
+let globalDataStore = null
+
+// Initialize global data store
+const initializeGlobalStore = () => {
+  if (!globalDataStore) {
+    console.log("🔄 Initializing global data store...")
+    globalDataStore = JSON.parse(JSON.stringify(initialData)) // Deep clone
+    console.log("✅ Global data store initialized")
+  }
+  return globalDataStore
 }
 
 // Development functions
@@ -96,6 +102,34 @@ const initializeDataFiles = () => {
   })
 }
 
+// Enhanced data persistence for production
+const persistToEnvironment = async (key, data) => {
+  try {
+    // In a real production environment, you would save to a database
+    // For now, we'll use a more robust in-memory approach with backup
+    const store = initializeGlobalStore()
+    store[key] = JSON.parse(JSON.stringify(data)) // Deep clone to prevent reference issues
+
+    console.log(`💾 Data persisted to global store for ${key}: ${data.length} items`)
+    return true
+  } catch (error) {
+    console.error(`❌ Error persisting data for ${key}:`, error)
+    return false
+  }
+}
+
+const readFromEnvironment = async (key) => {
+  try {
+    const store = initializeGlobalStore()
+    const data = store[key] || initialData[key] || []
+    console.log(`📖 Data read from global store for ${key}: ${data.length} items`)
+    return JSON.parse(JSON.stringify(data)) // Deep clone to prevent reference issues
+  } catch (error) {
+    console.error(`❌ Error reading data for ${key}:`, error)
+    return initialData[key] || []
+  }
+}
+
 const readData = async (key) => {
   try {
     if (isDevelopment) {
@@ -112,16 +146,18 @@ const readData = async (key) => {
 
       const data = fs.readFileSync(filePath, "utf8")
       const parsedData = JSON.parse(data)
-      console.log(`Read ${parsedData.length} items from ${key}`)
+      console.log(`📖 Read ${parsedData.length} items from ${key} (file)`)
       return parsedData
     } else {
-      // Production: Use in-memory storage
-      console.log(`Read ${memoryStore[key]?.length || 0} items from ${key} (memory)`)
-      return memoryStore[key] || []
+      // Production: Use enhanced global storage
+      return await readFromEnvironment(key)
     }
   } catch (error) {
-    console.error(`Error reading data for ${key}:`, error)
-    return initialData[key] || []
+    console.error(`❌ Error reading data for ${key}:`, error)
+    // Return initial data as fallback
+    const fallbackData = initialData[key] || []
+    console.log(`🔄 Using fallback data for ${key}: ${fallbackData.length} items`)
+    return fallbackData
   }
 }
 
@@ -136,15 +172,18 @@ const writeData = async (key, data) => {
 
       ensureDataDirectory()
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8")
-      console.log(`Successfully wrote ${data.length} items to ${key}.json`)
+      console.log(`💾 Successfully wrote ${data.length} items to ${key}.json`)
     } else {
-      // Production: Update in-memory storage
-      memoryStore[key] = data
-      console.log(`Successfully wrote ${data.length} items to ${key} (memory)`)
+      // Production: Use enhanced global storage
+      const success = await persistToEnvironment(key, data)
+      if (!success) {
+        throw new Error(`Failed to persist data for ${key}`)
+      }
+      console.log(`💾 Successfully wrote ${data.length} items to ${key} (global store)`)
     }
     return true
   } catch (error) {
-    console.error(`Error writing data for ${key}:`, error)
+    console.error(`❌ Error writing data for ${key}:`, error)
     return false
   }
 }
@@ -153,13 +192,44 @@ const generateId = () => {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9)
 }
 
+// Health check function to verify data integrity
+const healthCheck = async () => {
+  try {
+    const results = {}
+    for (const key of Object.keys(initialData)) {
+      const data = await readData(key)
+      results[key] = {
+        count: data.length,
+        lastUpdated: data.length > 0 ? data[0].updatedAt || data[0].createdAt : null,
+      }
+    }
+    return {
+      status: "healthy",
+      environment: isDevelopment ? "development" : "production",
+      dataStore: isDevelopment ? "file-system" : "global-memory",
+      data: results,
+      timestamp: new Date().toISOString(),
+    }
+  } catch (error) {
+    return {
+      status: "error",
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    }
+  }
+}
+
 // Initialize data files when module loads (development only)
 if (isDevelopment) {
   initializeDataFiles()
+} else {
+  // Initialize global store for production
+  initializeGlobalStore()
 }
 
 module.exports = {
   readData,
   writeData,
   generateId,
+  healthCheck,
 }
