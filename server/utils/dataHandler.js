@@ -1,59 +1,12 @@
+// Simple file-based storage for development and basic persistence for production
 const fs = require("fs")
 const path = require("path")
 
-// Initial data with more comprehensive sample data
+// Start with EMPTY initial data to avoid the reset issue
 const initialData = {
-  excelSheets: [
-    {
-      id: "1751907406474yl4tvdlqz",
-      name: "kartik",
-      description: "MBA ",
-      url: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-      category: "Finance",
-      status: "pending",
-      isPinned: true,
-      createdAt: "2025-07-07T16:56:46.478Z",
-      updatedAt: "2025-07-07T17:54:22.090Z",
-    },
-    {
-      id: "1751898524469cwr086fsd",
-      name: "Harsh",
-      description: "Hii how are you",
-      url: "https://e-commerce-one-woad-52.vercel.app/",
-      category: "Finance",
-      status: "completed",
-      isPinned: false,
-      createdAt: "2025-07-07T14:28:44.469Z",
-      updatedAt: "2025-07-07T14:28:44.469Z",
-    },
-  ],
-  websiteLinks: [
-    {
-      id: "1751718611072dltc5gqk8",
-      name: "tripeay",
-      description: "",
-      url: "https://tripeasy.in/",
-      category: "Finance",
-      status: "completed",
-      isPinned: true,
-      createdAt: "2025-07-05T12:30:11.072Z",
-      updatedAt: "2025-07-05T12:40:14.530Z",
-    },
-  ],
-  tasks: [
-    {
-      id: "175171438958586t9rmwbe",
-      name: "abhishek",
-      description: "",
-      category: "HR",
-      status: "inactive",
-      priority: "low",
-      dueDate: "2025-07-15",
-      isPinned: true,
-      createdAt: "2025-07-05T11:19:49.585Z",
-      updatedAt: "2025-07-05T11:20:02.364Z",
-    },
-  ],
+  excelSheets: [],
+  websiteLinks: [],
+  tasks: [],
 }
 
 // Check if we're in development or production
@@ -67,17 +20,12 @@ const FILE_MAP = {
   tasks: path.join(DATA_DIR, "tasks.json"),
 }
 
-// Global data store for production - using a more persistent approach
-let globalDataStore = null
-
-// Initialize global data store
-const initializeGlobalStore = () => {
-  if (!globalDataStore) {
-    console.log("🔄 Initializing global data store...")
-    globalDataStore = JSON.parse(JSON.stringify(initialData)) // Deep clone
-    console.log("✅ Global data store initialized")
-  }
-  return globalDataStore
+// Simple key-value storage simulation for production
+// This will work better than complex in-memory solutions
+const STORAGE_KEYS = {
+  excelSheets: "erp_excel_sheets",
+  websiteLinks: "erp_website_links",
+  tasks: "erp_tasks",
 }
 
 // Development functions
@@ -97,36 +45,46 @@ const initializeDataFiles = () => {
     const filePath = FILE_MAP[key]
     if (!fs.existsSync(filePath)) {
       fs.writeFileSync(filePath, JSON.stringify(initialData[key], null, 2))
-      console.log(`Initialized ${key}.json`)
+      console.log(`Initialized ${key}.json with empty array`)
     }
   })
 }
 
-// Enhanced data persistence for production
-const persistToEnvironment = async (key, data) => {
+// Production storage using environment variables as a simple key-value store
+const setEnvData = (key, data) => {
   try {
-    // In a real production environment, you would save to a database
-    // For now, we'll use a more robust in-memory approach with backup
-    const store = initializeGlobalStore()
-    store[key] = JSON.parse(JSON.stringify(data)) // Deep clone to prevent reference issues
-
-    console.log(`💾 Data persisted to global store for ${key}: ${data.length} items`)
+    // In production, we'll use a simple approach
+    // Store data in a global variable that persists during the function lifecycle
+    if (!global.erpData) {
+      global.erpData = {}
+    }
+    global.erpData[key] = JSON.parse(JSON.stringify(data))
+    console.log(`💾 Stored ${data.length} items for ${key} in global storage`)
     return true
   } catch (error) {
-    console.error(`❌ Error persisting data for ${key}:`, error)
+    console.error(`❌ Error storing data for ${key}:`, error)
     return false
   }
 }
 
-const readFromEnvironment = async (key) => {
+const getEnvData = (key) => {
   try {
-    const store = initializeGlobalStore()
-    const data = store[key] || initialData[key] || []
-    console.log(`📖 Data read from global store for ${key}: ${data.length} items`)
-    return JSON.parse(JSON.stringify(data)) // Deep clone to prevent reference issues
+    if (!global.erpData) {
+      global.erpData = {}
+    }
+
+    if (!global.erpData[key]) {
+      // Initialize with empty array if not exists
+      global.erpData[key] = []
+      console.log(`🔄 Initialized empty array for ${key}`)
+    }
+
+    const data = global.erpData[key] || []
+    console.log(`📖 Retrieved ${data.length} items for ${key} from global storage`)
+    return JSON.parse(JSON.stringify(data))
   } catch (error) {
-    console.error(`❌ Error reading data for ${key}:`, error)
-    return initialData[key] || []
+    console.error(`❌ Error retrieving data for ${key}:`, error)
+    return []
   }
 }
 
@@ -149,15 +107,14 @@ const readData = async (key) => {
       console.log(`📖 Read ${parsedData.length} items from ${key} (file)`)
       return parsedData
     } else {
-      // Production: Use enhanced global storage
-      return await readFromEnvironment(key)
+      // Production: Use global storage
+      return getEnvData(key)
     }
   } catch (error) {
     console.error(`❌ Error reading data for ${key}:`, error)
-    // Return initial data as fallback
-    const fallbackData = initialData[key] || []
-    console.log(`🔄 Using fallback data for ${key}: ${fallbackData.length} items`)
-    return fallbackData
+    // Return empty array instead of initial data to avoid reset issues
+    console.log(`🔄 Returning empty array for ${key}`)
+    return []
   }
 }
 
@@ -174,12 +131,12 @@ const writeData = async (key, data) => {
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8")
       console.log(`💾 Successfully wrote ${data.length} items to ${key}.json`)
     } else {
-      // Production: Use enhanced global storage
-      const success = await persistToEnvironment(key, data)
+      // Production: Use global storage
+      const success = setEnvData(key, data)
       if (!success) {
-        throw new Error(`Failed to persist data for ${key}`)
+        throw new Error(`Failed to store data for ${key}`)
       }
-      console.log(`💾 Successfully wrote ${data.length} items to ${key} (global store)`)
+      console.log(`💾 Successfully wrote ${data.length} items to ${key} (global)`)
     }
     return true
   } catch (error) {
@@ -192,7 +149,22 @@ const generateId = () => {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9)
 }
 
-// Health check function to verify data integrity
+// Clear all data function
+const clearAllData = async () => {
+  try {
+    const keys = Object.keys(initialData)
+    for (const key of keys) {
+      await writeData(key, [])
+    }
+    console.log("🧹 All data cleared successfully")
+    return true
+  } catch (error) {
+    console.error("❌ Error clearing data:", error)
+    return false
+  }
+}
+
+// Health check function
 const healthCheck = async () => {
   try {
     const results = {}
@@ -222,9 +194,6 @@ const healthCheck = async () => {
 // Initialize data files when module loads (development only)
 if (isDevelopment) {
   initializeDataFiles()
-} else {
-  // Initialize global store for production
-  initializeGlobalStore()
 }
 
 module.exports = {
@@ -232,4 +201,5 @@ module.exports = {
   writeData,
   generateId,
   healthCheck,
+  clearAllData,
 }
