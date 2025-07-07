@@ -5,17 +5,22 @@ const bodyParser = require("body-parser")
 const app = express()
 const PORT = process.env.PORT || 5000
 
-// CORS configuration for production
+// CORS configuration - Initially allow all origins, we'll update this after client deployment
 const corsOptions = {
   origin:
     process.env.NODE_ENV === "production"
       ? [
-          "https://your-client-domain.vercel.app", // Will update this after client deployment
-          "https://*.vercel.app", // Allow all Vercel preview deployments
+          "https://your-client-domain.vercel.app", // We'll update this after client deployment
+          "https://*.vercel.app", // Allow all Vercel preview deployments for now
         ]
       : "http://localhost:3000",
   credentials: true,
   optionsSuccessStatus: 200,
+}
+
+// For initial deployment, allow all origins temporarily
+if (process.env.NODE_ENV === "production") {
+  corsOptions.origin = true // Allow all origins temporarily
 }
 
 // Middleware
